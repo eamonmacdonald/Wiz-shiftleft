@@ -8,49 +8,29 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  pull-requests: write
-  security-events: write
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  Wiz-Security-Scans:
+  wiz-cli-iac-scan:
+    name: "Wiz-cli IaC Scan"
     runs-on: ubuntu-latest
     env:
-      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
-      WIZ_IAC_POLICY: "nixlab-iac-audit"
-      WIZ_SECRETS_POLICY: "nixlab-secrets-audit"
-      WIZ_VULN_POLICY: "nixlab-vuln-audit"
+      SCAN_PATH: "." # Set the relative path in the repo to scan
+      
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - name: Checkout
-        uses: actions/checkout@v4
+      # Checkout the repository to the GitHub Actions runner
+      - name: Check out repository
+        uses: actions/checkout@v2
 
       - name: Download Wiz CLI
-        run: |-
-          docker pull wiziocli.azurecr.io/wizcli:latest-amd64
-          docker tag wiziocli.azurecr.io/wizcli:latest-amd64 wizcli:latest
+        run: curl -o wizcli https://downloads.wiz.io/v1/wizcli/latest/wizcli-linux-amd64 && chmod +x wizcli
 
-      - name: Authenticate to Wiz
-        run: docker run --rm -v $(pwd):/cli wizcli:latest auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
-
-      - name: Run Wiz CLI IaC Scan
-        run: docker run --rm -v $(pwd):/cli/ wizcli:latest iac scan --path "." -p "$WIZ_IAC_POLICY" -p "$WIZ_SECRETS_POLICY" --tag github_action_run_id=${{ github.run_id }} -o iac-scan-results.sarif,sarif,true
-
-      - name: Upload SARIF file IaC
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: iac-scan-results.sarif
-          category: wiz-iac
-
-      - name: Run Wiz CLI Directory Scan
-        run: docker run --rm -v $(pwd):/cli/ wizcli:latest dir scan --path "." -p "$WIZ_VULN_POLICY" -p "$WIZ_SECRETS_POLICY" --tag github_action_run_id=${{ github.run_id }} -o dir-scan-results.sarif,sarif,true
-
-      - name: Upload SARIF file Dir
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: dir-scan-results.sarif
-          category: wiz-dir
+      - name: Run wiz CLI IaC scan
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: ./wizcli scan dir $SCAN_PATH
